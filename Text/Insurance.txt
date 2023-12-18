@@ -1,0 +1,62 @@
+-- person (driver id, name, address)
+-- car (license plate, model, year)
+-- accident (report number, year, location)
+-- owns (driver id, license plate)
+-- participated (report number, license plate, driver id, damage amount)
+
+
+-- Find the total number of people who owned cars that were involved in accidents in 2017.
+select count(driver_id) from participated, accident, owns,person 
+where accident.report_number = participated.report_number and 
+owns.driver_id = person.driver_id and 
+owns.license_plate = participated.license_plate and
+accident.year = "2017";
+
+--  Delete all year-2010 cars belonging to the person whose ID is '12345'
+delete from car where year = "2010" and license_plate in (select license_plate from own where driver_id = "12345");
+
+-- Find the number of accidents involving a car belonging to a person named “John Smith”.
+select count(report_number) from participated,person,car
+ where person.driver_id = participated.driver_id and 
+ car.license_plate = participated.license_plate and 
+ person.name = "John Smith";
+ 
+-- Update the damage amount for the car with license plate “AABB2000” in the accident with report number “AR2197” to $3000
+update participated set damaged_amount = "3000" where license_plate = "AABB2000" and report_number = "AR2197";
+
+-- DDL statement for Insurance database
+create table person (
+driver_id int not null,
+name varchar(25) not null,
+address varchar(45) not null,
+primary key(driver_id));
+
+create table car(
+license_plate varchar(25) not null,
+model varchar(25) not null,
+year int,
+primary key(license_plate));
+
+create table accident(
+report_number int not null,
+year int ,
+location varchar(25) not null,
+primary key(report_number));
+
+create table owns(
+driver_id int not null,
+license_plate varchar(25) not null,
+primary key(driver_id, license_plate),
+foreign key(driver_id) references person(driver_id),
+foreign key(license_plate) references car(license_plate));
+
+create table participated(
+report_number int not null,
+license_plate varchar(25) not null,
+driver_id int not null,
+damaged_amount numeric(10,2),
+primary key(report_number,license_plate,driver_id),
+foreign key(report_number) references accident(report_number),
+foreign key(license_plate) references car(license_plate),
+foreign key(driver_id) references person(driver_id));
+

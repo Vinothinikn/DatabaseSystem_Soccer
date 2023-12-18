@@ -1,0 +1,91 @@
+-- member(memb no, name)
+-- book(isbn, title, authors, publisher)
+-- borrowed(memb no, isbn, date)
+
+-- Find the member number and name of each member who has borrowed at least one book published by “McGraw-Hill”.
+
+select member_no, name from member where member_no in 
+(select member_no, count(member_no) from borrowed,book 
+where member.member_no = borrowed.member_no 
+and book.isbn = borrowed.isbn and publisher ="McGraw-Hill" group by member_no having count(member_no) = 1);
+
+-- Find the member number and name of each member who has borrowed every book published by “McGraw-Hill”
+select memb_no, name from member where memb_no in 
+(select memb_no from borrowed,book 
+where member.memb_no = borrowed.memb_no 
+and book.isbn = borrowed.isbn and publisher ="McGraw-Hill" );
+
+SELECT m.memb_no, m.name
+FROM member m
+WHERE NOT EXISTS (
+    SELECT bo.isbn
+    FROM book bo
+    WHERE bo.publisher = 'McGraw-Hill'
+      AND bo.isbn NOT IN (SELECT br.isbn FROM borrowed br WHERE br.memb_no = m.memb_no)
+);
+
+-- For each publisher, find the member number and name of each member who has borrowed more than five books of that publisher
+select borrowed.memb_no,name,publisher from member,borrowed ,book
+where member.memb_no = borrowed.memb_no  and 
+book.isbn = borrowed.isbn group by borrowed.memb_no,name,publisher having count(borrowed.memb_no) =1;
+
+SELECT m.memb_no, m.name, bo.publisher
+FROM member m
+JOIN borrowed b ON m.memb_no = b.memb_no
+JOIN book bo ON b.isbn = bo.isbn
+GROUP BY m.memb_no, m.name, bo.publisher
+HAVING COUNT(bo.isbn) > 1;
+
+
+-- Find the average number of books borrowed per member. 
+-- Take into account that if a member does not borrow any books, then that member does
+-- not appear in the borrowed relation at all, but that member still counts in the average.
+
+SELECT AVG(book_count) AS avg_books_per_member
+FROM (
+    SELECT COUNT(b.isbn) AS book_count
+    FROM member m
+    LEFT JOIN borrowed b ON m.memb_no = b.memb_no
+    GROUP BY m.memb_no
+) AS member_books;
+
+-- Rewrite the where clause
+-- where unique (select title from course) without using the unique construct
+
+select * from course where unique (select title from course);
+
+select * from course where (select count(distinct title) as count from course) = 1;
+
+SELECT *
+FROM course
+WHERE course_id IN (SELECT course_id FROM course GROUP BY course_id HAVING COUNT(title) = 1);
+
+ -- Consider the query:
+with dept_total (dept_name, value) as
+(select dept_name, sum(salary)
+from instructor
+group by dept_name),
+dept_total_avg(value) as
+(select avg(value)
+from dept_total)
+select dept_name
+from dept_total, dept_total_avg
+where dept_total.value >= dept_total_avg.value;
+-- Rewrite this query without using the with construct.
+
+SELECT dt.dept_name
+FROM (
+    SELECT dept_name, SUM(salary) AS value
+    FROM instructor
+    GROUP BY dept_name
+) AS dept_total,
+(
+    SELECT AVG(value) AS value
+    FROM (
+        SELECT dept_name, SUM(salary) AS value
+        FROM instructor
+        GROUP BY dept_name
+    ) AS subquery
+) AS dept_total_avg
+WHERE dept_total.value >= dept_total_avg.value;
+

@@ -1,0 +1,113 @@
+-- Find the member number and name of each member who has borrowed every book published by “McGraw-Hill”
+select memb_no, name from member where memb_no in 
+(select memb_no from borrowed,book 
+where member.memb_no = borrowed.memb_no 
+and book.isbn = borrowed.isbn and publisher ="McGraw-Hill" );
+
+SELECT m.memb_no, m.name
+FROM member m
+WHERE NOT EXISTS (
+    SELECT bo.isbn
+    FROM book bo
+    WHERE bo.publisher = 'McGraw-Hill'
+      AND bo.isbn NOT IN (SELECT br.isbn FROM borrowed br WHERE br.memb_no = m.memb_no)
+);
+
+-- Assume that companies may be located in several cities. 
+-- Find the name of each company that is located in every city in which “Small Bank Corporation” is located.
+select distinct company_name from company where city in (select city from company where company_name = "SBC");
+
+SELECT c.company_name
+FROM company c
+WHERE NOT EXISTS (
+  SELECT DISTINCT city
+  FROM company c2
+  WHERE c2.company_name = 'Small Bank Corporation'
+  EXCEPT
+  SELECT DISTINCT city
+  FROM company c3
+  WHERE c3.company_name = c.company_name
+);
+
+ -- Find each customer who has an account at every branch located in “Brooklyn”.
+SELECT c.*
+FROM customer c
+WHERE c.ID IN (
+    SELECT DISTINCT d.ID
+    FROM depositor d
+    JOIN account a ON d.account_number = a.account_number
+    JOIN branch b ON a.branch_name = b.branch_name
+    WHERE b.branch_city = 'Brooklyn'
+);
+
+
+SELECT DISTINCT c.ID, c.customer_name
+FROM customer c
+WHERE NOT EXISTS (
+    SELECT b.branch_name
+    FROM branch b
+    WHERE b.branch_city = 'Brooklyn'
+    EXCEPT
+    SELECT a.branch_name
+    FROM account a
+    WHERE a.ID = c.ID
+);
+
+
+-- Using the university schema, write an SQL query to find the names and IDs of
+-- those instructors who teach every course taught in his or her department (i.e.,
+-- every course that appears in the course relation with the instructor’s department name). Order result by name
+SELECT DISTINCT i.ID, i.name
+FROM instructor i
+WHERE NOT EXISTS (
+    SELECT c.course_id
+    FROM course c
+    WHERE c.dept_name = i.dept_name
+    EXCEPT
+    SELECT t.course_id
+    FROM teaches t
+    WHERE t.ID = i.ID
+)
+ORDER BY i.name;
+
+SELECT i.ID, i.name
+FROM instructor i
+JOIN course c ON i.dept_name = c.dept_name
+LEFT JOIN teaches t ON i.ID = t.ID AND c.course_id = t.course_id
+GROUP BY i.ID, i.name
+HAVING COUNT(DISTINCT c.course_id) = COUNT(DISTINCT t.course_id)
+ORDER BY i.name;
+
+
+-- Find the company that has the smallest payroll
+select company_name from works group by company_name having sum(salary) = (select min(tot_salary) from 
+(select company_name,sum(salary) as tot_salary from works group by company_name) as totl);
+
+-- find the section that had maximum enrollment in fall 2017
+with sec_enrollment as 
+(select takes.course_id, takes.sec_id ,count(takes.ID) as enrollment from takes, section
+where takes.course_id = section.course_id and
+takes.sec_id = section.sec_id and 
+takes.semester = section.semester and 
+takes.year = section.year and 
+takes.semester = "Fall" and
+takes.year = "2007" group by takes.course_id,takes.sec_id)
+select course_id,sec_id,enrollment from sec_enrollment where enrollment = (select max(enrollment) from sec_enrollment);
+
+SELECT course_id, sec_id, COUNT(ID) AS enrollment
+FROM takes
+JOIN section ON takes.course_id = section.course_id
+             AND takes.sec_id = section.sec_id
+             AND takes.semester = section.semester
+             AND takes.year = section.year
+WHERE takes.semester = 'Fall' AND takes.year = 2017
+GROUP BY course_id, sec_id
+HAVING COUNT(ID) = (SELECT MAX(enrollment)
+                   FROM (SELECT course_id, sec_id, COUNT(ID) AS enrollment
+                         FROM takes
+                         JOIN section ON takes.course_id = section.course_id
+                                    AND takes.sec_id = section.sec_id
+                                    AND takes.semester = section.semester
+                                    AND takes.year = section.year
+                         WHERE takes.semester = 'Fall' AND takes.year = 2017
+                         GROUP BY course_id, sec_id) AS subquery);

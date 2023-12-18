@@ -1,0 +1,446 @@
+use university_data;
+-- classroom(building, room number, capacity)
+-- department(dept name, building, budget)
+-- course(course id, title, dept name, credits)
+-- instructor(ID, name, dept name, salary)
+-- section(course id, sec id, semester, year, building, room number, time slot id)
+-- teaches(ID, course id, sec id, semester, year)
+-- student(ID, name, dept name, tot cred)
+-- takes(ID, course id, sec id, semester, year, grade)
+-- advisor(s ID, i ID)
+-- time slot(time slot id, day, start time, end time)
+-- prereq(course id, prereq id)
+-- gradepoints(grade,points)
+
+-- Find the titles of courses in the Comp. Sci. department that have 3 credits
+select title from course where dept_name = "Comp. Sci." and credits = 3;
+ 
+-- Find the IDs of all students who were taught by an instructor named Emma Davis; 
+-- make sure there are no duplicates in the result
+SELECT DISTINCT s.ID
+FROM student s
+JOIN takes t ON s.ID = t.ID
+JOIN teaches te ON t.course_id = te.course_id AND
+t.sec_id = te.sec_id and 
+t.semester = te.semester
+and t.year = te.year 
+JOIN instructor i ON te.ID = i.ID
+WHERE i.name = 'Emma Davis';
+
+
+-- Find the highest salary of any instructor.
+select max(salary) from instructor;
+
+-- Find all instructors earning the highest salary (there may be more than one with the same salary).
+select * from instructor where salary = (select max(salary) from instructor);
+
+-- find the section that had maximum enrollment in fall 2017
+with sec_enrollment as 
+(select takes.course_id, takes.sec_id ,count(takes.ID) as enrollment from takes, section
+where takes.course_id = section.course_id and
+takes.sec_id = section.sec_id and 
+takes.semester = section.semester and 
+takes.year = section.year and 
+takes.semester = "Fall" and
+takes.year = "2007" group by takes.course_id,takes.sec_id)
+select course_id,sec_id,enrollment from sec_enrollment where enrollment = (select max(enrollment) from sec_enrollment);
+
+SELECT course_id, sec_id, COUNT(ID) AS enrollment
+FROM takes
+JOIN section ON takes.course_id = section.course_id
+             AND takes.sec_id = section.sec_id
+             AND takes.semester = section.semester
+             AND takes.year = section.year
+WHERE takes.semester = 'Fall' AND takes.year = 2017
+GROUP BY course_id, sec_id
+HAVING COUNT(ID) = (SELECT MAX(enrollment)
+                   FROM (SELECT course_id, sec_id, COUNT(ID) AS enrollment
+                         FROM takes
+                         JOIN section ON takes.course_id = section.course_id
+                                    AND takes.sec_id = section.sec_id
+                                    AND takes.semester = section.semester
+                                    AND takes.year = section.year
+                         WHERE takes.semester = 'Fall' AND takes.year = 2017
+                         GROUP BY course_id, sec_id) AS subquery);
+
+
+CREATE TABLE grade_points (
+    grade VARCHAR(2) PRIMARY KEY,
+    points DECIMAL(3, 2)  -- You can adjust the precision and scale as needed
+);
+    
+-- Find the total grade points earned by the student with ID 12345, across all courses taken by the student
+
+select (credits * points) as total_grade_points, takes.ID from takes, course, grade_points
+where takes.course_id = course.course_id and 
+takes.grade = grade_points.grade and takes.ID = "99754";
+
+-- Find the grade point average (GPA) for the above student, that is, the total
+-- grade points divided by the total credits for the associated courses.
+select sum(credits * points)/sum(credits) as GPA from takes, course, grade_points
+where takes.course_id = course.course_id and 
+takes.grade = grade_points.grade  and takes.ID = "99754";
+
+-- Find the ID and the grade-point average of each student.
+select takes.ID, sum(credits * points)/sum(credits) as GPA from takes, course, grade_points
+where takes.course_id = course.course_id and 
+takes.grade = grade_points.grade group by takes.ID;
+
+--  students who have not taken any courses
+select * from student where ID not in ( select ID from takes);
+
+-- display students GPA as null who have not taken courses
+select ID, null as GPA from student where not exists ( select * from takes where takes.ID = student.ID);
+
+SELECT s.ID, s.name, s.dept_name, s.tot_cred,
+       sum(credits * points)/sum(credits) AS GPA
+FROM student s
+LEFT JOIN takes t ON s.ID = t.ID
+Left join course c on t.course_id = c.course_id
+LEFT JOIN gradepoints gp ON t.grade = gp.grade
+GROUP BY s.ID, s.name, s.dept_name, s.tot_cred;
+
+
+-- Increase the salary of each instructor in the Comp. Sci. department by 10%
+select * from instructor where dept_name = "Comp. Sci.";
+update instructor set salary = salary *1.10 where dept_name = "Comp. Sci.";
+
+-- Delete all courses that have never been offered (i.e., do not occur in the section relation).
+select * from course where course_id not in (select course_id from section);
+delete from course where course_id not in (select course_id from section);
+
+-- Insert every student whose tot cred attribute is greater than 100 as an instructor in the same department,
+-- with a salary of $10,000
+insert into instructor select ID, name , dept_name ,10000 from student where tot_cred >100;
+
+
+--  Find the ID and name of each student who has taken at least one Comp. Sci. course; 
+-- make sure there are no duplicate names in the result.
+select distinct ID, name from student,courses,takes
+where student.dept_name = courses.dept_name and 
+takes.course_id = courses.course_id and student.dept_name = "Comp.Sci.";
+
+-- find the ID and name of each student who has not taken any course offered before 2017.
+ select Id, name from student where student.id not in 
+ (select distinct(id) from section inner join takes
+on section.course_id =takes.course_id and 
+ section.sec_id = section.sec_id where section.year  < 2007);
+ 
+
+ -- For each department, find the maximum salary of instructors in that department. 
+ -- You may assume that every department has at least one instructor.
+select dept_name, max(salary) from instructor group by dept_name;
+
+-- Find the lowest, across all departments, of the per-department maximum salary computed by the preceding query
+select min(maxsalary) as minsalary from 
+(select dept_name, max(salary) as maxsalary from instructor group by dept_name) as dept_min;
+
+-- Create a new course “CS-001”, titled “Weekly Seminar”, with 0 credits
+INSERT INTO course (course_id, title, dept_name, credits)
+VALUES ('CS-001', 'Weekly Seminar', 'Comp. Sci.', 0);
+
+-- Create a section of this course in Fall 2017, with sec id of 1, and with the location of this section not yet specified.
+-- section(course id, sec id, semester, year, building, room number, time slot id)
+insert into section(course_id, sec_id, semester, year) values ("CS-001", 1, "Fall", 2017);
+
+-- Enroll every student in the Comp. Sci. department in the above section.
+-- takes(ID, course id, sec id, semester, year, grade)
+insert into takes (ID, course_id, sec_id, semester, year) 
+select Id, "CS-001",1,"Fall",2017 from student where dept_name ="Comp. Sci.";
+
+-- Delete enrollments in the above section where the student’s ID is 12345
+delete from takes where Id = "12345" and sec_id = 1 and course_id = "CS-001";
+
+-- Delete the course CS-001. What will happen if you run this delete statement 
+-- without first deleting offerings (sections) of this course
+-- foreign key constraint violation if there are references to this course in the "section" table
+ 
+ -- Delete all takes tuples corresponding to any section of any course with
+-- the word “advanced” as a part of the title; ignore case when matching the word with the title
+delete from section where course_id in (select course_id from course where lower(title) like "%advanced%");
+
+-- marks(Id, score)
+-- grade F if score < 40, grade C if 40≤ score < 60, grade B if 60 ≤ score < 80, and grade A if 80 ≤ score
+-- Display the grade for each student, based on the marks relation
+SELECT Id, score,
+    CASE
+        WHEN score < 40 THEN 'F'
+        WHEN score >= 40 AND score < 60 THEN 'C'
+        WHEN score >= 60 AND score < 80 THEN 'B'
+        WHEN score >= 80 THEN 'A'
+        ELSE 'Invalid Score'
+    END AS grade
+FROM marks;
+
+
+-- Find the number of students with each grade
+
+select grade, count(*) as noOfStudents from (select Id, score, 
+case 
+ when score< 40 then "F"
+ when score >=40 and score <60 then "C"
+ when score >=60 and score < 80 then "B"
+ when score >=80 then "A"
+ end as grade
+from marks) as grades 
+group by grade;
+
+-- write a query that finds departments whose names contain the string “sci” as a substring, regardless of the case
+select * from department where lower(dept_name) like "%sci.%";
+
+
+-- Using the university schema, write an SQL query to find the name and ID of those 
+-- Accounting students advised by an instructor in the Physics department
+select name , id from student, advisor,instructor,department
+ where student.id = advisor.s_id and 
+ instructor.id = advisor.i_id and 
+ department.dept_name = instructor.dept_name
+ and student.dept_name = "Accounting"and instructor.dept_name = "Physics";
+
+-- Using the university schema, write an SQL query to find the names of those
+-- departments whose budget is higher than that of Philosophy. List them in alphabetic ord
+select dept_name
+ from department 
+ where budget > (select budget from department where dept_name = "Philosophy") order by dept_name;
+ 
+ -- Using the university schema, use SQL to do the following: For each student who
+-- has retaken a course at least twice (i.e., the student has taken the course at least
+-- three times), show the course ID and the student’s ID.
+-- Please display your results in order of course ID and do not display duplicate rows
+-- takes(ID, course id, sec id, semester, year, grade)
+
+select distinct t1.course_id, t1.Id as student_id 
+from take t1 inner join takes t2
+ on t1.course_id = t2.course_id and t1.id = t2.id 
+ inner join takes t3 on
+ t1.course_id = t3.course_id and t1.id = t3.id 
+ WHERE t1.grade IS NOT NULL
+  AND t2.grade IS NOT NULL
+  AND t3.grade IS NOT NULL
+  AND t1.grade <> t2.grade
+  AND t2.grade <> t3.grade
+  AND t1.grade <> t3.grade
+ORDER BY t1.course_id, student_id; 
+
+-- using the university schema, write an SQL query to find the IDs of those students 
+-- who have retaken at least three distinct courses at least once (i.e, the student has taken the course at least two times).
+SELECT ID
+FROM (
+    SELECT ID, course_id, COUNT(DISTINCT semester) AS distinct_semesters
+    FROM takes
+    GROUP BY ID, course_id
+    HAVING COUNT(DISTINCT semester) >= 3
+) AS retaken_courses
+GROUP BY ID
+HAVING COUNT(course_id) >= 3
+ORDER BY ID;
+
+
+-- Using the university schema, write an SQL query to find the names and IDs of
+-- those instructors who teach every course taught in his or her department (i.e.,
+-- every course that appears in the course relation with the instructor’s department name). Order result by name
+select distinct Id, name from instructor , teaches, courses where instructor.id = teaches.id and 
+teaches.id = courses.id order by name;
+
+SELECT DISTINCT i.ID, i.name
+FROM instructor i
+WHERE NOT EXISTS (
+    SELECT c.course_id
+    FROM course c
+    WHERE c.dept_name = i.dept_name
+    EXCEPT
+    SELECT t.course_id
+    FROM teaches t
+    WHERE t.ID = i.ID
+)
+ORDER BY i.name;
+
+-- Using the university schema, write an SQL query to find the name and ID of
+-- each History student whose name begins with the letter ‘D’ and who has not
+-- taken at least five Music courses
+select id,name from student inner join takes 
+on student.id = takes.id inner join courses 
+on courses.course_id = takes.course_id where 
+name like "D%" and student.dept_name = "History" and courses.dept_name = "Music"
+group by id, name having count(distinct course.course_id)<5;
+
+
+-- Using the university schema, write an SQL query to find the ID and name of each
+-- instructor who has never given an A grade in any course she or he has taught.
+-- (Instructors who have never taught a course trivially satisfy this condition.
+
+SELECT DISTINCT i.ID, i.name
+FROM instructor i
+LEFT JOIN teaches t ON i.ID = t.ID
+LEFT JOIN takes tk ON t.course_id = tk.course_id AND t.sec_id = tk.sec_id AND t.semester = tk.semester AND t.year = tk.year
+WHERE tk.grade IS NULL OR tk.grade <> 'A'
+ORDER BY i.ID;
+
+-- Rewrite the preceding query, but also ensure that you include only instructors
+-- who have given at least one other non-null grade in some course.
+SELECT DISTINCT i.ID, i.name
+FROM instructor i
+JOIN teaches t ON i.ID = t.ID
+JOIN takes tk ON t.course_id = tk.course_id AND t.sec_id = tk.sec_id AND t.semester = tk.semester AND t.year = tk.year
+WHERE tk.grade IS NULL OR (tk.grade <> 'A' AND tk.grade IS NOT NULL)
+ORDER BY i.ID;
+
+-- Using the university schema, write an SQL query to find the ID and title of each
+-- course in Comp. Sci. that has had at least one section with afternoon hours (i.e.,
+-- ends at or after 12:00). (You should eliminate duplicates if any.
+
+SELECT DISTINCT c.course_id, c.title
+FROM course c
+JOIN section s ON c.course_id = s.course_id
+JOIN time_slot t ON s.time_slot_id = t.time_slot_id
+WHERE c.dept_name = 'Comp. Sci.' AND t.end_time >= '12:00'
+ORDER BY c.course_id;
+
+ -- Using the university schema, write an SQL query to find the number of students
+-- in each section. The result columns should appear in the order “courseid, secid,
+-- year, semester, num”. You do not need to output sections with 0 students.
+SELECT t.course_id, t.sec_id, t.year, t.semester, COUNT(t.ID) AS num
+FROM takes t
+GROUP BY t.course_id, t.sec_id, t.year, t.semester
+HAVING COUNT(t.ID) > 0
+ORDER BY t.course_id, t.sec_id, t.year, t.semester;
+
+-- Using the university schema, write an SQL query to find section(s) with maximum enrollment. 
+-- The result columns should appear in the order “courseid,
+-- secid, year, semester, num”. (It may be convenient to use the with construct.
+WITH SectionEnrollment AS (
+    SELECT t.course_id,t.sec_id,t.year,t.semester,COUNT(t.ID) AS num FROM takes t
+    GROUP BY t.course_id, t.sec_id, t.year, t.semester)
+SELECT se.course_id, se.sec_id, se.year, se.semester, se.num FROM SectionEnrollment se
+WHERE se.num = (SELECT MAX(num) FROM SectionEnrollment);
+
+-- Display a list of all instructors, showing each instructor’s ID and the number of sections taught.
+--  Make sure to show the number of sections as 0 for instructors who have not taught any section. 
+-- Your query should use an outer join, and should not use subqueries
+SELECT i.ID AS instructor_id, COUNT(t.course_id) AS num_sections_taught
+FROM instructor i LEFT JOIN teaches t ON i.ID = t.ID
+GROUP BY i.ID ORDER BY i.ID;
+
+-- Write the same query as in part a, but using a scalar subquery and not using outer join
+SELECT ID AS instructor_id,( 
+SELECT COUNT(*) FROM teaches t WHERE t.ID = i.ID
+) AS num_sections_taught
+FROM instructor i ORDER BY ID;
+
+-- Display the list of all course sections offered in Spring 2018, along with the ID and name of each instructor teaching the section. 
+-- If a section has more than one instructor, that section should appear as many times in the result as it has instructors. 
+-- If a section does not have any instructor,it should still appear in the result with the instructor name set to “—”.
+-- instructor(ID, name, dept name, salary)
+-- section(course id, sec id, semester, year, building, room number, time slot id)
+-- teaches(ID, course id, sec id, semester, year)
+-- department(dept name, building, budget)
+
+select s.course_id, s.sec_id,s.semester,s.year, t.id,t.name from section s left join teaches t on
+s.course_id = t.course_id and s.sec_id = t.sec_id and s.semester = t.semester and s.year = t.year 
+left join instructor i on i.id = t.id where s.semester = "Spring" and s.year = "2018"
+group by s.course_id, s.sec_id,s.semester,s.year, t.id;
+
+-- Display the list of all departments, with the total number of instructors in each department, without using subqueries.
+-- Make sure to show departments that have no instructors, and list those departments with an instructor count of zero
+select d.dept_name, count(i.id) as instructor_count from instructor i left join department d
+on i.dept_name = d.dept_name group by d.dept_name order by d.dept_name;
+
+
+-- Write an SQL query using the university schema to find the ID of each student
+-- who has never taken a course at the university. Do this using no subqueries and no set operations (use an outer join)
+select s.id from student s left join takes t on s.id = t.id where t.Id is null;
+
+-- rewrite the query without using subquery and set operation
+select ID from student except select s id from advisor where i ID is not null;
+
+select distinct s.Id from student s left join advisor a on s.id = a.s_id where a.s_id is null;
+
+-- Find all students who have taken all courses offered in the Biology department.
+
+SELECT T.ID, S.name
+FROM takes AS T
+JOIN student AS S ON T.ID = S.ID
+WHERE T.course_id IN (SELECT course_id FROM course WHERE dept_name = 'Biology')
+GROUP BY T.ID, S.name
+HAVING COUNT(DISTINCT T.course_id) = (SELECT COUNT(*) FROM course WHERE dept_name = 'Biology');
+
+-- Find all courses that were offered at most once in 2017
+select T.course_id from course as T 
+where unique ( select R.course_id from section as R where T.course_id= R.course_id  and R.year = 2017);
+
+SELECT course_id FROM section WHERE year = 2017
+GROUP BY course_id HAVING COUNT(*) <= 1;
+
+-- Find the average instructors’ salaries of those departments where the average salary is greater than $42,000.”
+select dept_name, avg_salary from 
+( select dept_name, avg (salary) as avg_salary from instructor group by dept_name) having avg_salary > 42000;
+
+-- Find all departments with the maximum budget 
+SELECT dept_name, budget
+FROM department
+WHERE budget = (SELECT MAX(budget) FROM department);
+
+
+select dept_name, max(budget) as maxbudget from department
+group by dept_name having MaxBudget = (select max(budget) from department);
+
+with MaxBudget as  
+(select dept_name , max(budget) as max_budget from department group by dept_name) 
+select dept_name, max_budget from MaxBudget where max_budget = (select max(max_budget) from MaxBudget);
+
+-- Find all departments where the total salary is greater than the average of the total salary at all departments
+
+SELECT dept_name, SUM(salary) AS total_salary
+FROM instructor
+GROUP BY dept_name
+HAVING SUM(salary) > 
+(SELECT AVG(total_salary) FROM 
+(SELECT SUM(salary) AS total_salary FROM instructor GROUP BY dept_name) AS avg_salaries);
+
+-- List all departments along with the number of instructors in each department (scalar subquery)
+select dept_name,( select count(*)from instructor
+where department.dept_name = instructor.dept_name)as num_instructors from department;
+
+-- Increase salaries of instructors whose salary is over $100,000 by 3%, and all others by a 5% 
+ update instructor set salary = case
+ when salary <= 100000 then salary * 1.05
+ else salary * 1.03
+ end;
+ 
+ -- Recompute and update tot_creds value for all students
+update student S
+set tot_cred = (select sum(credits)
+from takes, course
+where takes.course_id = course.course_id  and
+S.ID= takes.ID.and takes.grade not in ('F') and
+takes.grade is not null);
+
+-- instead "cascade"
+CREATE TABLE course (
+    -- Other column definitions...
+    dept_name VARCHAR(20),
+    FOREIGN KEY (dept_name) REFERENCES department(dept_name)
+        ON DELETE SET NULL
+        ON UPDATE SET NULL,
+    -- Other column definitions...
+);
+
+-- View 
+create view StudentsTakingAllBiologyCourses as
+SELECT T.ID, S.name
+FROM takes AS T
+JOIN student AS S ON T.ID = S.ID
+WHERE T.course_id IN (SELECT course_id FROM course WHERE dept_name = 'Biology')
+GROUP BY T.ID, S.name
+HAVING COUNT(DISTINCT T.course_id) = (SELECT COUNT(*) FROM course WHERE dept_name = 'Biology');
+
+-- SQL Procedure
+create procedure dept_count_proc (in dept_name varchar(20),out d_count integer)
+begin
+	select count(*) into d_count from instructor
+    where instructor.dept_name = dept_count_proc.dept_name
+end;
+
+-- How to call procedure
+declare d_count integer;
+call dept_count_proc( 'Physics', d_count);

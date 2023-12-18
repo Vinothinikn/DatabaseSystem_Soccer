@@ -1,0 +1,167 @@
+ 
+ -- employee (ID, person name, street, city)
+-- works (ID, company name, salary)
+-- company (company name, city)
+-- manages (ID, manager id)
+
+use company_db;
+
+-- Find the ID, name, and city of residence of each employee who works for “First Bank Corporation”
+
+select ID, person_name, city from employee, works, company 
+where employee.id = works.id and 
+works.company_name = company.company_name and
+works.company_name = "FBC";
+
+ -- Find the ID, name, and city of residence of each employee who works for “First Bank Corporation” and earns more than $10000.
+select ID, person_name, city from employee, works, company 
+where employee.id = works.id and 
+works.company_name = company.company_name and
+works.company_name = "FBC"and employee.salary > 10000;
+
+-- Find the ID of each employee who does not work for “First Bank Corporation”.
+select Id from employee, works where employee.Id = works.Id and 
+works.company_name not in ("FBC");
+
+-- Find the ID of each employee who earns more than every employee of “Small Bank Corporation”.
+SELECT DISTINCT e.ID
+FROM employee e
+JOIN works w ON e.ID = w.ID
+WHERE w.salary > ALL (
+    SELECT salary
+    FROM works
+    WHERE company_name = 'Small Bank Corporation'
+);
+
+-- Assume that companies may be located in several cities. 
+-- Find the name of each company that is located in every city in which “Small Bank Corporation” is located.
+select distinct company_name from company where city in (select city from company where company_name = "SBC");
+
+SELECT c.company_name
+FROM company c
+WHERE NOT EXISTS (
+  SELECT DISTINCT city
+  FROM company c2
+  WHERE c2.company_name = 'Small Bank Corporation'
+  EXCEPT
+  SELECT DISTINCT city
+  FROM company c3
+  WHERE c3.company_name = c.company_name
+);
+
+-- find the name of the company that has the most employees (or companies, in the case where there is a tie for the most).
+select company_name, max(noOfEmployees) as max_employees  from
+(select company_name , count(employee.employee_name) as noOfEmployees from works,employee 
+where works.employee_name = employee.employee_name group by company_name) as comp group by company_name;
+
+with comp_most as (select company_name , count(employee.employee_name) as noOfEmployees from works,employee 
+where works.employee_name = employee.employee_name group by company_name) 
+select company_name, noOfEmployees from comp_most where noOfEmployees = (select max(noOfEmployees) from comp_most);
+
+SELECT company_name
+FROM (
+  SELECT company_name, COUNT(*) AS employee_count
+  FROM works
+  GROUP BY company_name
+  ORDER BY employee_count DESC
+  LIMIT 1
+) as comp;
+
+
+-- Find the name of each company whose employees earn a higher salary, on average, than the average salary at “First Bank Corporation”.
+select company_name from works where avg(salary)>(select avg(salary) from works where company_name ="FBC");
+
+-- Modify the database so that the employee whose ID is '12345' now lives in “Newtown”.
+update employee set city = "Newtown" where ID = "12345";
+
+-- Give each manager of “First Bank Corporation” a 10 percent raise unless
+-- the salary becomes greater than $100000; in such cases, give only a 3 percent raise.
+UPDATE works
+SET salary = 
+    CASE 
+        WHEN company_name = 'First Bank Corporation' AND salary * 1.1 <= 100000 THEN salary * 1.1
+        WHEN company_name = 'First Bank Corporation' AND salary * 1.1 > 100000 THEN salary * 1.03
+        ELSE salary
+    END
+WHERE ID IN (SELECT ID FROM manages WHERE manager_id IS NOT NULL);
+
+
+-- Find ID and name of each employee who lives in the same city as the location of the company for which the employee works
+select Id, name from employee, works,company 
+where employee.Id = works.Id and 
+company.company_name = works.company_name and 
+company.city = employee.city;
+
+-- . Find ID and name of each employee who lives in the same city and on the same street as does her or his manager.
+select Id, person_name, city, street from 
+(select Id, person_name, city, street from employee where id not in (select Id from manages)) as manager
+where (city, street) in (select city, street from employee inner join manages on employee.Id = manages.id);
+
+-- Find ID and name of each employee who earns more than the average salary of all employees of her or his company.
+select Id, name from employee, works where employee.id = works.id and 
+works.salary >( select avg(salary) from works where company_name = works.company_name);
+
+-- Find the company that has the smallest payroll
+select company_name from works group by company_name having sum(salary) = (select min(tot_salary) from 
+(select company_name,sum(salary) as tot_salary from works group by company_name) as totl);
+
+with smallest_payroll as
+(select company_name,sum(salary) as tot_salary from works group by company_name)
+select company_name from smallest_payroll where tot_salary = (select min(tot_salary) from smallest_payroll);
+
+--  Give all employees of “First Bank Corporation” a 10 percent raise.
+update works set salary = salary *1.10 where company_name = "FBC";
+
+-- Give all managers of “First Bank Corporation” a 10 percent raise
+update works set salary = salary *1.10 where company_name  = "FBC" and Id in (select Id from manages);
+
+-- Delete all tuples in the works relation for employees of “Small Bank Corporation"
+delete from works where company_name = "SBC";
+
+-- List two reasons why null values might be introduced into the database
+-- using a null value allows you to represent the absence of data or the lack of a specific value for that attribute.
+-- Null values can be used to indicate that the actual value of an attribute is unknown or undefined. 
+
+-- Show that, in SQL, <> all is identical to not in
+SELECT *
+FROM employee
+WHERE Id <> ALL (SELECT Id FROM manages);
+
+SELECT *
+FROM employee
+WHERE Id not in (SELECT Id FROM manages);
+
+-- write a query to find the ID of each employee with no manager. 
+-- Note that an employee may simply have no manager listed or may have a null manager. 
+-- Write your query using an outer join and then write it again using no outer join at all
+select e.id from employee e left  join manages m on e.id = m.id where m.id is null; 
+
+select e.id from employee e where e.id not in (select distinct(m.id) from manages m where m.manager_id is null)
+
+-- DDL
+create table employee(
+Id int not null,
+person_name varchar(25) not null,
+street varchar(100),
+city varchar(25),
+primary key(Id));
+
+create table works(
+Id int not null,
+company_name varchar(45) not null,
+salary int not null,
+primary key (Id),
+foreign key(Id) references employee(Id),
+foreign key(company_name) references company(company_name));
+
+create table company(
+company_name varchar(45) not null,
+city varchar(25) not null,
+primary key(company_name));
+
+create table manages(
+Id int not null,
+managerId int not null,
+primary key(Id),
+foreign key(Id) references employee(Id));
+
